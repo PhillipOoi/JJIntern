@@ -14,7 +14,7 @@ const init = async () => {
         path: '/',
         handler: (request, h) => {
 
-            return 'Hello World!!@@@@@S';
+            return 'Hello World!!!!!';
         }
     });
 
