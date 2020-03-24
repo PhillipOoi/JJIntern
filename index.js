@@ -43,8 +43,8 @@ const init = async () => {
         method: 'POST',
         path: '/post',
         handler: function (request, h) {
-    
-            return 'Blog post added';
+            var text = request.payload.post;
+            return 'Blog post ' + text + ' added';
         },
         options: {
             tags: ['api'],
