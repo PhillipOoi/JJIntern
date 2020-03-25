@@ -8,7 +8,46 @@ const Inert = require('@hapi/inert');
 const Joi = require('@hapi/joi');
 const sql = require( "./sql" );
 const Pack = require('./package');
+const JWT = require('jsonwebtoken'); 
 
+//003
+const lib = require('./lib');
+const secret = 'NeverShareYourSecret';
+const people = { // our "users database"
+    1: {
+      id: 1,
+      name: 'Jen Jones',
+      scope:'admin'
+    },
+    2: {
+        id: 2,
+        name: 'Cena Jones',
+        scope:'superadmin'
+      }
+};
+const token = JWT.sign(people[1], secret); 
+const token2 = JWT.sign(people[2], secret);
+console.log(token,people[1]);
+console.log(token2,people[2]);
+//003
+const validate = async function (decoded, request, h) {
+    console.log(" - - - - - - - decoded token:");
+  console.log(decoded);
+  console.log(" - - - - - - - request info:");
+  console.log(request.info);
+  console.log(" - - - - - - - user agent:");
+  console.log(request.headers['user-agent']);
+
+    // do your checks to see if the person is valid
+    if (!people[decoded.id]) {
+      return { isValid: false };
+    }
+    else {
+      return { isValid: true };
+    }
+};
+
+ 
 const createServer = async () => {
   const server = Hapi.server( {
     port: process.env.PORT || 8080,
@@ -19,14 +58,13 @@ const createServer = async () => {
   return server;
 };
 
-
 const init = async () => {
     dotenv.config();
     const server = await createServer();
 
     const swaggerOptions = {
         info: {
-                title: 'Test API Documentation',
+                title: `Test API Documentation`,
                 version: Pack.version,
             },
         };
@@ -39,7 +77,20 @@ const init = async () => {
             plugin: HapiSwagger,
             options: swaggerOptions
         }
+        //003
+        ,lib
     ]);
+    
+    //003
+    server.auth.strategy('jwt', 'jwt',
+    { key: 'NeverShareYourSecret', // Never Share your secret key
+      validate, // validate function defined above
+      verifyOptions: { algorithms: [ 'HS256' ] }
+    });
+
+    server.auth.default('jwt');
+
+    
     
     await server.start();
     console.log( "Server running on %s", server.info.uri );
@@ -60,7 +111,13 @@ const init = async () => {
         },options: {
             description: 'Display All Orders',
             notes: 'Display all order details',
-            tags: ['api']
+            tags: ['api'],
+            auth:{
+                strategy: 'jwt',
+                access: [{         // you can configure different access for each route
+                    scope: 'superadmin' // each access can define a set of scopes with type prefix ('+','-' or empty)
+                  }]
+            }
         }
     });
 
@@ -76,10 +133,14 @@ const init = async () => {
                 console.log( err );
                 return "order entered not found";
             }
-        },options: {
+        },   
+        options: {
             description: 'Display Specific Order Details',
             notes: 'Display order details by getting order id from url',
-            tags: ['api']
+            tags: ['api'],
+            auth:{
+                scope:[`admin`,`superadmin`]
+            }
         }
     });
 
@@ -90,18 +151,23 @@ const init = async () => {
         path: "/addOrder",
         handler: async ( request, h ) => {
             try {
-                const startDate = request.startDate;
-                const endDate = request.startDate;
-                const addOrder = await h.sql (`INSERT INTO "public"."orders" ("start_date","end_date") VALUES ${ startDate },${ endDate } `);
+                const {orderID, start, end } = request.payload;
+                const addOrder = await h.sql`INSERT INTO orders 
+                (order_id,start_date,end_date)
+                VALUES 
+                (${ orderID },${ start },${ end} )`;
                 return addOrder;
             } catch ( err ) {
-                console.log( err );
-                return "Add order fail";
+                console.log( err , sql );
+                return `Add order fail`;
             }
         },options: {
             description: 'Add Order',
             notes: 'Add order with start date and end date',
-            tags: ['api']
+            tags: ['api'],
+            auth:{
+                mode:'optional'
+            }
         }
     });
 
@@ -111,18 +177,22 @@ const init = async () => {
         path: "/updateOrder",
         handler: async ( request, h ) => {
             try {
-                const updateOrder = await h.sql`UPDATE public.orders ('start_date','end_date') 
-                SET start_date = ${ startDate } , end_date = ${ endDate }
+                const {start,end,orderID} = request.payload;
+                const updateOrder = await h.sql`UPDATE orders 
+                SET start_date = ${ start } , end_date = ${ end }
                 WHERE order_id = ${ orderID }`;
                 return updateOrder;
             } catch ( err ) {
                 console.log( err );
-                return "update order fail";
+                return `update order fail`;
             }
         },options: {
             description: 'Update Order',
             notes: 'Update order by order id to update start date and end date',
-            tags: ['api']
+            tags: ['api'],
+            auth: {
+                mode:`optional`
+            }
         }
     });
 
@@ -142,9 +212,30 @@ const init = async () => {
         options: {
             description: 'Delete Order',
             notes: 'Delete order by getting order id from url',
-            tags: ['api']
+            tags: ['api'],
+            auth:{
+                scope:['superadmin']
+            }
         }
     });
+
+    //003
+    server.route([
+        {
+          method: "GET", path: "/", config: { auth: false },
+          handler: function(request, h) {
+            return 'Welcome';
+          }
+        },
+        {
+          method: 'GET', path: '/restricted', config: { auth: 'jwt' },
+          handler: function(request, h) {
+            const response = h.response({text: 'You used a Token!'});
+            response.header("Authorization", request.headers.authorization);
+            return response;
+          }
+        }
+      ]);
 };
   
 
