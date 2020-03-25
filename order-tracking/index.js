@@ -4,8 +4,10 @@ const dotenv = require( "dotenv" );
 const Hapi = require( "@hapi/hapi" );
 const Vision = require('@hapi/vision');
 const HapiSwagger = require('hapi-swagger');
+const Inert = require('@hapi/inert');
 const Joi = require('@hapi/joi');
 const sql = require( "./sql" );
+const Pack = require('./package');
 
 const createServer = async () => {
   const server = Hapi.server( {
@@ -21,10 +23,28 @@ const createServer = async () => {
 const init = async () => {
     dotenv.config();
     const server = await createServer();
+
+    const swaggerOptions = {
+        info: {
+                title: 'Test API Documentation',
+                version: Pack.version,
+            },
+        };
+
+    await server.register([
+        sql,
+        Inert,
+        Vision,
+        {
+            plugin: HapiSwagger,
+            options: swaggerOptions
+        }
+    ]);
+    
     await server.start();
     console.log( "Server running on %s", server.info.uri );
 
-    await server.register( [ sql ] );
+
     //select 
     server.route({
         method: "GET",
@@ -68,8 +88,7 @@ const init = async () => {
             try {
                 const startDate = request.startDate;
                 const endDate = request.startDate;
-                const addOrder = await h.sql (`INSERT INTO "public"."orders" ("start_date","end_date") VALUES
-                ( ${ startDate },${ endDate }) `);
+                const addOrder = await h.sql (`INSERT INTO "public"."orders" ("start_date","end_date") VALUES ${ startDate },${ endDate } `);
                 return addOrder;
             } catch ( err ) {
                 console.log( err );

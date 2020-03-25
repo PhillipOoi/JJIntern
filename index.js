@@ -20,6 +20,10 @@ const init = async () => {
         handler: (request, h) => {
 
             return 'Hello World!!!!!';
+        },options:{
+            description: 'Display Message',
+            notes: 'Display Hello World',
+            tags: ['api']
         }
     });
 
@@ -33,6 +37,8 @@ const init = async () => {
             return `Welcome ${payload.username}!!`;
         },
         options:{
+            description: 'Display Wellcome User',
+            notes: 'Display username by getting it from URL',
             tags: ['api']
         }
         
@@ -47,6 +53,8 @@ const init = async () => {
             return 'Blog post ' + text + ' added';
         },
         options: {
+            description: 'Display Blog Post',
+            notes: 'Display blod post added ',
             tags: ['api'],
             validate: {
                 payload: Joi.object({
