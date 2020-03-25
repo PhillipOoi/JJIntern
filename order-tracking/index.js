@@ -58,6 +58,8 @@ const init = async () => {
                 return "order(s) fail to display";
             }
         },options: {
+            description: 'Display All Orders',
+            notes: 'Display all order details',
             tags: ['api']
         }
     });
@@ -75,6 +77,8 @@ const init = async () => {
                 return "order entered not found";
             }
         },options: {
+            description: 'Display Specific Order Details',
+            notes: 'Display order details by getting order id from url',
             tags: ['api']
         }
     });
@@ -95,6 +99,8 @@ const init = async () => {
                 return "Add order fail";
             }
         },options: {
+            description: 'Add Order',
+            notes: 'Add order with start date and end date',
             tags: ['api']
         }
     });
@@ -114,6 +120,8 @@ const init = async () => {
                 return "update order fail";
             }
         },options: {
+            description: 'Update Order',
+            notes: 'Update order by order id to update start date and end date',
             tags: ['api']
         }
     });
@@ -132,6 +140,8 @@ const init = async () => {
             }
         },
         options: {
+            description: 'Delete Order',
+            notes: 'Delete order by getting order id from url',
             tags: ['api']
         }
     });
