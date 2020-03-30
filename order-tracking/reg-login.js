@@ -1,6 +1,5 @@
 "use strict";
 
-const redis = require('redis');
 const dotenv = require( "dotenv" );
 const Hapi = require( "@hapi/hapi" );
 const Vision = require('@hapi/vision');
@@ -10,7 +9,8 @@ const Joi = require('@hapi/joi');
 const sql = require( "./sql" );
 const Pack = require('./package');
 const JWT = require('jsonwebtoken'); 
-var Hoek = require('hoek'); 
+const boom = require(`@hapi/boom`);
+
 
 //003
 const lib = require('./lib');
@@ -27,63 +27,39 @@ const people = { // our "users database"
         scope:'superadmin'
       }
 };
-
-var custom_fields = {
-    email     : Joi.string().email().required(), // Required
-    firstname : Joi.string()                     // Optional field
-}
-var opts = { fields: custom_fields };       // set options when registering the plugin
-var Boom        = require('@hapi/boom');
-var bcrypt      = require('bcrypt'); // see: https://github.com/nelsonic/bcrypt
-var redisClient = require('redis-connection')();
-function custom_handler(request, reply){
-  redisClient.get(request.payload.email, function (err, reply) {
-    if(err) { // error when if not already registered, register the person:
-      bcrypt.genSalt(12, function(err, salt) {
-        bcrypt.hash(req.payload.password, salt, function(err, hash) {
-          request.payload.password = hash; // save the password's hash
-          redisClient.set(request.payload.email, JSON.stringify(request.payload));
-          return reply('Success')
-        }); // end bcrypt.hash
-      }); // end bcrypt.genSalt
-    }
-    else {
-      return reply(Boom.badRequest('Already Registered'));
-    }
-  });
-}
-
-var options = {
-    fields: fields,
-    handler: handler,
-    loginPath: "/api/login"
-  }
-// include the custom_handler in your otps object:
-opts.handler = custom_handler;
 const token = JWT.sign(people[1], secret); 
 const token2 = JWT.sign(people[2], secret);
 console.log(token,people[1]);
 console.log(token2,people[2]);
-//003
+
+//04 
+const redisClient = require('redis-connection')();
+const bcrypt = require('bcrypt');
+const Uuid = require('uuid');
 const validate = async function (decoded, request, h) {
-    console.log(" - - - - - - - decoded token:");
+  console.log(" - - - - - - - decoded token:");
   console.log(decoded);
   console.log(" - - - - - - - request info:");
   console.log(request.info);
   console.log(" - - - - - - - user agent:");
   console.log(request.headers['user-agent']);
+  const message = "";
+  redisClient.get(decoded.session_id, function (rediserror, reply) {
+    if(rediserror) {
+    console.log(rediserror+"GG");
+    return {isValid: false};
+    }
+    console.log(reply.toString()+"!!!");
+    message = message + reply;
+    
+    return {isValid: true};
+}); 
+    
 
-    // do your checks to see if the person is valid
-    if (!people[decoded.id]) {
-      return { isValid: false };
-    }
-    else {
-      return { isValid: true };
-    }
 };
 
  
-/*const createServer = async () => {
+const createServer = async () => {
   const server = Hapi.server( {
     port: process.env.PORT || 8080,
     host: process.env.HOST || "localhost"
@@ -92,10 +68,11 @@ const validate = async function (decoded, request, h) {
 
   return server;
 };
-*/
+
+
 const init = async () => {
     dotenv.config();
-    //const server = await createServer();
+    const server = await createServer();
 
     const swaggerOptions = {
         info: {
@@ -113,15 +90,8 @@ const init = async () => {
             options: swaggerOptions
         }
         //003
-        ,lib
+        ,lib 
     ]);
-
-    var server = new Hapi.Server({ debug: false })
-server.connection({ port: 8080 });
-server.register([{ register: require('hapi-register'), options:opts,sql }], function (err) {
-  if (err) { console.error('Failed to load plugin:', err); }
-});
-
     
     //003
     server.auth.strategy('jwt', 'jwt',
@@ -141,7 +111,7 @@ server.register([{ register: require('hapi-register'), options:opts,sql }], func
     //select 
     server.route({
         method: "GET",
-        path: "/getOrder",//change to orders
+        path: "/getOrder",
         handler: async ( request, h ) => {
             try {
                 const allOrder = await h.sql`SELECT * FROM public.orders`;
@@ -169,8 +139,7 @@ server.register([{ register: require('hapi-register'), options:opts,sql }], func
         path: "/getOrder/{orderid}",
         handler: async ( request, h ) => {
             try {
-                const allOrderSQL = esacpe(`SELECT * FROM public.orders where order_id = ${request.params.orderid}`);
-                const orderByID = await h.sql(allOrderSQL);
+                const orderByID = await h.sql`SELECT * FROM public.orders where order_id = ${request.params.orderid}`;
                 return orderByID;
             } catch ( err ) {
                 console.log( err );
@@ -257,8 +226,8 @@ server.register([{ register: require('hapi-register'), options:opts,sql }], func
             notes: 'Delete order by getting order id from url',
             tags: ['api'],
             auth:{
-                scope:['superadmin'],
-                mode:'optional'
+                strategy: 'jwt',
+                scope:['superadmin']
             }
         }
     });
@@ -281,38 +250,132 @@ server.register([{ register: require('hapi-register'), options:opts,sql }], func
         }
       ]);
 
-      server.route({
+    server.route({
         method: 'POST',
-        path: '/gettt',
-        handler: function(request, reply) {
+        path: '/register',
+        handler: async ( request, h ) => {
             try{
-                const {getEmail, getPW } = request.payload;
-                var email = getEmail;
-                var password = getPW;
-                bcrypt.genSalt(12, function(err, salt) {  // encrypt the password:
-                    bcrypt.hash(password, salt, function(err, hash) {
-                      var insertSql = `INSERT INTO %s (email, password) VALUES ( %L, %L)`;
-                      var insert = escape(insertSql, 'user', email, hash);
-                      request.pg.client.query(insert, function(err, result) {
-                        // at this point we should not be getting an error...
-                        Hoek.assert(!err, 'ERROR: inserting data into Postgres', err);
-                        return reply.view('success', {
-                          email : email // also escaped
-                        });
-                      });
-                    }); // end bcrypt.hash
-                  }); // end bcrypt.genSalt
+                const { id,  email, pw } = request.payload;
+                escape({id, email, pw});
+                const saltRounds =12;
+                const salt = bcrypt.genSaltSync(saltRounds);
+                const hash = bcrypt.hashSync(pw, salt);
+                const insert = await h.sql`INSERT INTO users 
+                (user_id,email,password)
+                 VALUES 
+                (${ id },${ email },${ hash })`;
+                escape(insert);
+                return insert;
             }catch ( err ) {
                 console.log( err );
                 return "register fail";
             }
-          },options:{
+        },options:{
             auth:{
+                strategy: 'jwt',
                 mode:'optional'
             }
         }
-
       });
+
+
+      server.route({
+        method: 'POST',
+        path: '/login',
+        handler: async ( request, h ) => {
+            try{
+                const { email, pw } = request.payload;
+                console.log("Email"+email);
+                const e_mail = escape(`${ email }`);
+                const getPW = await h.sql`SELECT password FROM users where email =${e_mail}`;4
+                escape(getPW);
+                if(getPW==false){
+                    return "Invalid Combination of Email and Password";
+                }else{
+                    const password = escape(`${ pw }`);
+                    console.log("Password"+password)
+                    const hash = getPW[0].password;
+                    const checkPW = bcrypt.compareSync(password, hash);
+                    if(checkPW==true){
+                        const getQuery = await h.sql`SELECT user_id,roles FROM users where email = ${e_mail}`;
+                        const uid = getQuery[0].user_id;
+                        const role = getQuery[0].roles;
+                        const sid = Uuid.v4();
+                        console.log("sid= "+sid+",uid="+uid+",role="+role);
+                        let sessionRedisObj = {
+                            session_id : `${sid}`,
+                            uid : `${uid}`,
+                            role : `${role}`,
+                            expiry : "1"
+                        };
+                        let sessionObj = {
+                            session_id : `${sid}`,
+                            expiry : `100s`
+                        };
+                        const insert = await h.sql`INSERT INTO sessions 
+                        (session_id,user_id,roles,expire)
+                        VALUES 
+                        (${ sid },${ uid },${ role },${uid})`;
+                        const session= JSON.stringify(sessionRedisObj);
+                        const JWTSession= JSON.stringify(sessionObj);
+                        const JWTSign = JWT.sign(JWTSession,secret);
+                        console.log("JWTSign ="+JWTSign);
+                        try{
+                        const redisIn = redisClient.set(sid,session);
+                        console.log("Redis"+redisIn);
+                            return "loginSuccesful";
+                        }catch(err){
+                            console.log(err);
+                            return err;
+                        }
+                    }else{
+                        loginMsg = "Invalid Combination of Email and Password";
+                    }
+                    return loginMsg;
+                }
+            }catch ( err ) {
+                console.log( err );
+                return "login function error";
+            }
+                
+        },options:{
+            auth:{
+                mode:"optional"
+            }
+        }
+      });
+      server.route({
+        method: 'POST',
+        path: '/loginVerify',
+        handler: async ( request, h ) => {
+            try{
+                const inToken = request.payload;
+                escape(inToken);
+                console.log(`${inToken.inToken}`);
+            var decoded = JWT.verify(`${inToken.inToken}`, secret);
+            console.log(decoded.session_id);
+            redisClient.get(decoded.session_id, function (rediserror, reply) {
+                if(rediserror) {
+                console.log(rediserror+"GG");
+                message = "welcome users";
+                return {isValid: false};
+                }
+                console.log(reply.toString()+"!!!");
+                message = message + reply;
+                
+                return {isValid: true};
+            });
+            return message;
+            }catch(err){
+                return err;
+            }
+        },options:{
+            auth:{
+                mode:"required"
+            }
+        }
+      });
+      
 };
   
 
