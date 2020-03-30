@@ -350,6 +350,7 @@ const init = async () => {
         handler: async ( request, h ) => {
             try{
                 const inToken = request.payload;
+                escape(inToken);
                 console.log(`${inToken.inToken}`);
             var decoded = JWT.verify(`${inToken.inToken}`, secret);
             console.log(decoded.session_id);
