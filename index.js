@@ -1,5 +1,6 @@
 "use strict";
 
+const redis = require('redis');
 const dotenv = require( "dotenv" );
 const Hapi = require( "@hapi/hapi" );
 const Vision = require('@hapi/vision');
@@ -9,6 +10,7 @@ const Joi = require('@hapi/joi');
 const sql = require( "./sql" );
 const Pack = require('./package');
 const JWT = require('jsonwebtoken'); 
+var Hoek = require('hoek'); 
 
 //003
 const lib = require('./lib');
@@ -25,6 +27,39 @@ const people = { // our "users database"
         scope:'superadmin'
       }
 };
+
+var custom_fields = {
+    email     : Joi.string().email().required(), // Required
+    firstname : Joi.string()                     // Optional field
+}
+var opts = { fields: custom_fields };       // set options when registering the plugin
+var Boom        = require('@hapi/boom');
+var bcrypt      = require('bcrypt'); // see: https://github.com/nelsonic/bcrypt
+var redisClient = require('redis-connection')();
+function custom_handler(request, reply){
+  redisClient.get(request.payload.email, function (err, reply) {
+    if(err) { // error when if not already registered, register the person:
+      bcrypt.genSalt(12, function(err, salt) {
+        bcrypt.hash(req.payload.password, salt, function(err, hash) {
+          request.payload.password = hash; // save the password's hash
+          redisClient.set(request.payload.email, JSON.stringify(request.payload));
+          return reply('Success')
+        }); // end bcrypt.hash
+      }); // end bcrypt.genSalt
+    }
+    else {
+      return reply(Boom.badRequest('Already Registered'));
+    }
+  });
+}
+
+var options = {
+    fields: fields,
+    handler: handler,
+    loginPath: "/api/login"
+  }
+// include the custom_handler in your otps object:
+opts.handler = custom_handler;
 const token = JWT.sign(people[1], secret); 
 const token2 = JWT.sign(people[2], secret);
 console.log(token,people[1]);
@@ -48,7 +83,7 @@ const validate = async function (decoded, request, h) {
 };
 
  
-const createServer = async () => {
+/*const createServer = async () => {
   const server = Hapi.server( {
     port: process.env.PORT || 8080,
     host: process.env.HOST || "localhost"
@@ -57,10 +92,10 @@ const createServer = async () => {
 
   return server;
 };
-
+*/
 const init = async () => {
     dotenv.config();
-    const server = await createServer();
+    //const server = await createServer();
 
     const swaggerOptions = {
         info: {
@@ -80,6 +115,13 @@ const init = async () => {
         //003
         ,lib
     ]);
+
+    var server = new Hapi.Server({ debug: false })
+server.connection({ port: 8080 });
+server.register([{ register: require('hapi-register'), options:opts,sql }], function (err) {
+  if (err) { console.error('Failed to load plugin:', err); }
+});
+
     
     //003
     server.auth.strategy('jwt', 'jwt',
@@ -99,7 +141,7 @@ const init = async () => {
     //select 
     server.route({
         method: "GET",
-        path: "/getOrder",
+        path: "/getOrder",//change to orders
         handler: async ( request, h ) => {
             try {
                 const allOrder = await h.sql`SELECT * FROM public.orders`;
@@ -127,7 +169,8 @@ const init = async () => {
         path: "/getOrder/{orderid}",
         handler: async ( request, h ) => {
             try {
-                const orderByID = await h.sql`SELECT * FROM public.orders where order_id = ${request.params.orderid}`;
+                const allOrderSQL = esacpe(`SELECT * FROM public.orders where order_id = ${request.params.orderid}`);
+                const orderByID = await h.sql(allOrderSQL);
                 return orderByID;
             } catch ( err ) {
                 console.log( err );
@@ -214,7 +257,8 @@ const init = async () => {
             notes: 'Delete order by getting order id from url',
             tags: ['api'],
             auth:{
-                scope:['superadmin']
+                scope:['superadmin'],
+                mode:'optional'
             }
         }
     });
@@ -236,6 +280,39 @@ const init = async () => {
           }
         }
       ]);
+
+      server.route({
+        method: 'POST',
+        path: '/gettt',
+        handler: function(request, reply) {
+            try{
+                const {getEmail, getPW } = request.payload;
+                var email = getEmail;
+                var password = getPW;
+                bcrypt.genSalt(12, function(err, salt) {  // encrypt the password:
+                    bcrypt.hash(password, salt, function(err, hash) {
+                      var insertSql = `INSERT INTO %s (email, password) VALUES ( %L, %L)`;
+                      var insert = escape(insertSql, 'user', email, hash);
+                      request.pg.client.query(insert, function(err, result) {
+                        // at this point we should not be getting an error...
+                        Hoek.assert(!err, 'ERROR: inserting data into Postgres', err);
+                        return reply.view('success', {
+                          email : email // also escaped
+                        });
+                      });
+                    }); // end bcrypt.hash
+                  }); // end bcrypt.genSalt
+            }catch ( err ) {
+                console.log( err );
+                return "register fail";
+            }
+          },options:{
+            auth:{
+                mode:'optional'
+            }
+        }
+
+      });
 };
   
 
