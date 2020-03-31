@@ -36,25 +36,32 @@ console.log(token2,people[2]);
 const redisClient = require('redis-connection')();
 const bcrypt = require('bcrypt');
 const Uuid = require('uuid');
+const decodedSID = "";
 const validate = async function (decoded, request, h) {
-  console.log(" - - - - - - - decoded token:");
+  /*console.log(" - - - - - - - decoded token:");
   console.log(decoded);
   console.log(" - - - - - - - request info:");
   console.log(request.info);
   console.log(" - - - - - - - user agent:");
   console.log(request.headers['user-agent']);
-  const message = "";
-  redisClient.get(decoded.session_id, function (rediserror, reply) {
-    if(rediserror) {
-    console.log(rediserror+"GG");
-    return {isValid: false};
+  */
+ //await infront 
+ const redisReturn = await redisClient.get(decoded.session_id);
+console.log(redisReturn);
+    if(redisReturn==true){
+        redisClient.get(decoded.session_id, function (error, result) {
+            if (error) {
+                console.log(error);
+                throw error;
+            }
+            console.log('GET result ->' + result);
+        });
+
+        return{isValid:true}//TO-DO: credential
+    }else{
+        console.log(false);
+        return{isValid:false}
     }
-    console.log(reply.toString()+"!!!");
-    message = message + reply;
-    
-    return {isValid: true};
-}); 
-    
 
 };
 
@@ -321,7 +328,7 @@ const init = async () => {
                         const JWTSign = JWT.sign(JWTSession,secret);
                         console.log("JWTSign ="+JWTSign);
                         try{
-                        const redisIn = redisClient.set(sid,session);
+                        const redisIn = await redisClient.set(sid,session);
                         console.log("Redis"+redisIn);
                             return "loginSuccesful";
                         }catch(err){
@@ -345,30 +352,18 @@ const init = async () => {
         }
       });
       server.route({
-        method: 'POST',
+        method: 'GET',
         path: '/loginVerify',
         handler: async ( request, h ) => {
-            try{
-                const inToken = request.payload;
-                escape(inToken);
-                console.log(`${inToken.inToken}`);
-            var decoded = JWT.verify(`${inToken.inToken}`, secret);
-            console.log(decoded.session_id);
-            redisClient.get(decoded.session_id, function (rediserror, reply) {
+            /*const redisStatus=redisClient.get(decodedSID, function (rediserror, reply) {
                 if(rediserror) {
                 console.log(rediserror+"GG");
-                message = "welcome users";
-                return {isValid: false};
+                return false;
                 }
                 console.log(reply.toString()+"!!!");
-                message = message + reply;
-                
-                return {isValid: true};
-            });
-            return message;
-            }catch(err){
-                return err;
-            }
+                return reply.toString();
+            })*/
+            return "hi";
         },options:{
             auth:{
                 mode:"required"
