@@ -366,7 +366,7 @@ const init = async () => {
         }
     });
 
-    //verify token and display user info
+    //verify token
     server.route({
         method: 'GET',
         path: '/loginVerify',
